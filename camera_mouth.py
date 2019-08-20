@@ -273,7 +273,6 @@ if __name__ == '__main__':
                 mouth= cv2.resize(cropII,(IMG_H,IMG_W),interpolation=cv2.INTER_AREA)	
                 mouth2 = np.reshape(mouth,(1,IMG_H,IMG_W,DIM))
 
-                #mouth = cv2.resize(cropII, (128, 128))
                 mouth2 = mouth2/255.0
 
                 count += 1

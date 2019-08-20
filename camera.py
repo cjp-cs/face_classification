@@ -176,8 +176,10 @@ class DetectThread(threading.Thread):
 if __name__ == '__main__':
 
     # modify according to input size
-    IMG_H = 32
-    IMG_W = 32
+    MOUTH_IMG_H = 32
+    MOUTH_IMG_W = 32
+    EYES_IMG_H = 64
+    EYES_IMG_W = 64
     DIM = 1
 
     # What model to download.
@@ -185,18 +187,29 @@ if __name__ == '__main__':
     PATH_TO_FACE_PB = MODEL_DIR + '/frozen_inference_graph.pb'
     PATH_TO_LABELS = os.path.join(MODEL_DIR, 'wider_face_label_map.pbtxt')
 
-    MOUTH_DIR = 'model20'
-    PATH_TO_MOUTH_PB = MOUTH_DIR + '/frozen_model.pb'
+    #MOUTH_DIR = 'model20'
+    PATH_TO_MOUTH_PB = 'mouth_graph.pb'
+
+    PATH_TO_EYES_PB = 'eyes_graph.pb'
 
     # load mouth detection graph
-    graph = load_graph(PATH_TO_MOUTH_PB)
+    graph_mouth = load_graph(PATH_TO_MOUTH_PB)
+
+    # load eyes detection graph
+    graph_eyes = load_graph(PATH_TO_EYES_PB)
+
 
     # We can verify that we can access the list of operations in the graph
-    for op in graph.get_operations():
+    for op in graph_mouth.get_operations():
+        print(op.name)
+    for op in graph_eyes.get_operations():
         print(op.name)
 
-    x = graph.get_tensor_by_name('prefix/input_layer:0')
-    y = graph.get_tensor_by_name('prefix/softmax_tensor:0')
+    x_mouth = graph_mouth.get_tensor_by_name('prefix/input_layer:0')
+    y_mouth = graph_mouth.get_tensor_by_name('prefix/softmax_tensor:0')
+
+    x_eyes = graph_eyes.get_tensor_by_name('prefix/input:0')
+    y_eyes = graph_eyes.get_tensor_by_name('prefix/output:0')
 
     NUM_CLASSES = 3
     face_detector = FaceDetector(PATH_TO_FACE_PB, PATH_TO_LABELS, NUM_CLASSES)
@@ -226,113 +239,151 @@ if __name__ == '__main__':
     op = 0
     smoke = 0
 
-    with tf.Session(graph=graph) as sess:
-        while (1):
-            # get a frame
-            ret, frame = cap.read()
-            # show a frame
-            face_detector.update_frame(frame)
-            if face_detector.read_flag() == False:
-                face_detector.update_flag(True)
-            faces = face_detector.get_face()
-            
-            if (len(faces) > 0) :
-                cropstatus = True
+    closed_count = 0
 
-            area = 0
-
-            for face in faces:
-                w = face.xmax-face.xmin
-                h = face.ymax-face.ymin
-
-                tlx = face.xmin
-                tly = face.ymin
-                brx = face.xmax
-                bry = face.ymax
-
-                # record coordinates of face with largest area
-                if (brx - tlx) * (bry - tly) > area:
-                    area = (brx - tlx) * (bry - tly)
-                    xmin = tlx
-                    xmax = brx
-                    ymin = tly
-                    ymax = bry
-            
-            if len(faces) > 0:
-
-                # show face
-                cropI = frame[int(ymin):int(ymax),int(xmin):int(xmax)]
-                cropI = cv2.resize(cropI, (128, 128))
-                cv2.imshow("face", cropI)
-
-                # crop and show mouth
-                cropII = cropI[70:120]
-
-                cv2.imshow("mouth", cropII)
-                cropII = cv2.cvtColor(cropII,cv2.COLOR_BGR2GRAY)
-                mouth= cv2.resize(cropII,(IMG_H,IMG_W),interpolation=cv2.INTER_AREA)	
-                mouth2 = np.reshape(mouth,(1,IMG_H,IMG_W,DIM))
-
-                #mouth = cv2.resize(cropII, (128, 128))
-                mouth2 = mouth2/255.0
-
-                count += 1
-
-                # run prediction and record computation time - disregard first image/gpu initialization time
-                start = time.time()
-                pred = sess.run(y,feed_dict={x:mouth2})
-                end = time.time()
-                if count != 1:
-                    t += (end - start)
-
-                maxId = np.argmax(pred)
-                predScore = pred[0][maxId]
-
-                # Display class, score, and warning if applicable - need 5 consecutive frames of mouth open for warning to appear
-                font                   = cv2.FONT_HERSHEY_SIMPLEX
-                bottomLeftCornerOfText = (40, 80)
-                fontScale              = 3
-                fontColor              = (0, 0, 255)
-                lineType               = 2
-
-                if str(maxId) == '0':
-                    status = 'closed'
-                    smoke = 0
-                    op = 0
-                elif str(maxId) == '1':
-                    status = 'open'
-                    op += 1
-                    if op >= 5:
-                        cv2.putText(frame,'WARNING!', 
-                            bottomLeftCornerOfText, 
-                            font, 
-                            fontScale,
-                            fontColor,
-                            lineType)
-                else:
-                    status = 'smoking'
-                    smoke += 1
-                    if smoke >= 5:
-                        cv2.putText(frame,'WARNING!', 
-                            bottomLeftCornerOfText, 
-                            font, 
-                            fontScale,
-                            fontColor,
-                            lineType)
+    with tf.Session(graph=graph_mouth) as sess_mouth:
+        with tf.Session(graph=graph_eyes) as sess_eyes:
+            while (1):
+                # get a frame
+                ret, frame = cap.read()
+                # show a frame
+                face_detector.update_frame(frame)
+                if face_detector.read_flag() == False:
+                    face_detector.update_flag(True)
+                faces = face_detector.get_face()
                 
-                print("Class: " + status + "  Score : " + str(predScore))
+                if (len(faces) > 0) :
+                    cropstatus = True
 
-            cv2.imshow("capture", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                face_detector.draw_flag = False
-                break
-        detect_thread.join()
-        cap.release()
-        cv2.destroyAllWindows()
-    
-    print('Average speed per image: {} seconds'.format(t / count))
+                area = 0
 
-    # write speed results to text file
-    file1 = open(MOUTH_DIR + "/{}_results.txt".format(MOUTH_DIR),"a") 
-    file1.write('Average speed per image: {} seconds\n'.format(t / count))
-    file1.close()
+                for face in faces:
+                    w = face.xmax-face.xmin
+                    h = face.ymax-face.ymin
+
+                    tlx = face.xmin
+                    tly = face.ymin
+                    brx = face.xmax
+                    bry = face.ymax
+
+                    # record coordinates of face with largest area
+                    if (brx - tlx) * (bry - tly) > area:
+                        area = (brx - tlx) * (bry - tly)
+                        xmin = tlx
+                        xmax = brx
+                        ymin = tly
+                        ymax = bry
+                
+                if len(faces) > 0:
+
+                    # show face
+                    face_crop = frame[int(ymin):int(ymax),int(xmin):int(xmax)]
+                    face_crop = cv2.resize(face_crop, (128, 128))
+                    cv2.imshow("face", face_crop)
+
+                    # crop and show mouth
+                    mouth_crop = face_crop[70:120]
+
+                    cv2.imshow("mouth", mouth_crop)
+                    mouth_crop = cv2.cvtColor(mouth_crop,cv2.COLOR_BGR2GRAY)
+                    mouth= cv2.resize(mouth_crop,(MOUTH_IMG_H, MOUTH_IMG_W),interpolation=cv2.INTER_AREA)	
+                    mouth2 = np.reshape(mouth,(1, MOUTH_IMG_H, MOUTH_IMG_W,DIM))
+                    mouth2 = mouth2/255.0
+
+                    # Crop eyes
+                    cropped_eyes = face_crop[int(0.2*face_crop.shape[0]):int(0.6*face_crop.shape[0]),:]
+                    cv2.imshow("cropped eyes", cropped_eyes)
+
+                    # Resize
+                    resized = cv2.resize(cropped_eyes, (128, 128))
+                    cv2.imshow("resized eyes", cropped_eyes)
+
+                    # Convert to grayscale
+                    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+                    gray = gray/255.0
+
+                    # Use numpy to reshape
+                    reshaped = np.reshape(gray, (1, 128, 128, 1))
+
+                    # Feed final image into sess.run()
+                    start = time.time()
+                    #result_mouth, result_eyes = sess.run([y_mouth, feed_dict={x_mouth:mouth2}, y_eyes, feed_dict={x_eyes:reshaped}])
+                    result_mouth = sess_mouth.run(y_mouth, feed_dict={x_mouth:mouth2})
+                    result_eyes = sess_eyes.run(y_eyes, feed_dict={x_eyes:reshaped})
+                    end = time.time()
+
+                    count += 1
+                    if count != 1:
+                        t += (end - start)
+
+                    maxId_mouth = np.argmax(result_mouth)
+                    predScore_mouth = result_mouth[0][maxId_mouth]
+                    maxId_eyes = np.argmax(result_eyes)
+                    predScore_eyes = result_eyes[0][maxId_eyes]
+
+                    # Display class, score, and warning if applicable - need 5 consecutive frames of mouth open for warning to appear
+                    font                   = cv2.FONT_HERSHEY_SIMPLEX
+                    bottomLeftCornerOfText = (40, 80)
+                    fontScale              = 3
+                    fontColor              = (0, 0, 255)
+                    lineType               = 2
+
+                    if str(maxId_mouth) == '0':
+                        status_mouth = 'closed'
+                        smoke = 0
+                        op = 0
+                    elif str(maxId_mouth) == '1':
+                        status_mouth = 'open'
+                        op += 1
+                        if op >= 5:
+                            cv2.putText(frame,'WARNING!', 
+                                bottomLeftCornerOfText, 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
+                    else:
+                        status_mouth = 'smoking'
+                        smoke += 1
+                        if smoke >= 5:
+                            cv2.putText(frame,'WARNING!', 
+                                bottomLeftCornerOfText, 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
+
+                    if str(maxId_eyes) == '0':
+                        print("Eyes: eyes open")
+                        closed_count = 0
+
+                    elif str(maxId_eyes) == '1':
+                        print("Eyes: eyes closed")
+                        closed_count += 1
+                        if closed_count >= 5:
+                            cv2.putText(frame,'WARNING!', 
+                                bottomLeftCornerOfText, 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
+                    elif str(maxId_eyes) == '2':
+                        cv2.putText(frame,'WARNING!', 
+                                bottomLeftCornerOfText, 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
+                        print("Eyes: no eyes detected")
+                        
+                    print("Mouth: " + status_mouth)
+
+                cv2.imshow("capture", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    face_detector.draw_flag = False
+                    break
+            detect_thread.join()
+            cap.release()
+            cv2.destroyAllWindows()
+        
+        print('Average speed per image: {} seconds'.format(t / count))
