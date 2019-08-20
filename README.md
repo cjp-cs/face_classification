@@ -1,1 +1,1 @@
-# face_classification
+# eye and mouth classification models for facial detection
