@@ -172,25 +172,23 @@ class DetectThread(threading.Thread):
 
 if __name__ == '__main__':
 
-    # modify according to input size
+    # Dimensions of mouth input
     MOUTH_IMG_H = 32
     MOUTH_IMG_W = 32
     DIM = 1
 
-    # What model to download.
+    # What face detection model to download
     MODEL_DIR = 'face_detect/tf_model'
     PATH_TO_FACE_PB = MODEL_DIR + '/frozen_inference_graph.pb'
     PATH_TO_LABELS = os.path.join(MODEL_DIR, 'wider_face_label_map.pbtxt')
 
-    #MOUTH_DIR = 'model20'
     PATH_TO_MOUTH_PB = 'mouth_graph.pb'
-
     PATH_TO_EYES_PB = 'eyes_graph.pb'
 
-    # load mouth detection graph
+    # Load mouth detection graph
     graph_mouth = load_graph(PATH_TO_MOUTH_PB)
 
-    # load eyes detection graph
+    # Load eyes detection graph
     graph_eyes = load_graph(PATH_TO_EYES_PB)
 
 
@@ -238,9 +236,9 @@ if __name__ == '__main__':
     with tf.Session(graph=graph_mouth) as sess_mouth:
         with tf.Session(graph=graph_eyes) as sess_eyes:
             while (1):
-                # get a frame
+                # Get a frame
                 ret, frame = cap.read()
-                # show a frame
+                # Show a frame
                 face_detector.update_frame(frame)
                 if face_detector.read_flag() == False:
                     face_detector.update_flag(True)
@@ -260,7 +258,7 @@ if __name__ == '__main__':
                     brx = face.xmax
                     bry = face.ymax
 
-                    # record coordinates of face with largest area
+                    # Record coordinates of face with largest area
                     if (brx - tlx) * (bry - tly) > area:
                         area = (brx - tlx) * (bry - tly)
                         xmin = tlx
@@ -270,14 +268,13 @@ if __name__ == '__main__':
                 
                 if len(faces) > 0:
 
-                    # show face
+                    # Crop and show face
                     face_crop = frame[int(ymin):int(ymax),int(xmin):int(xmax)]
                     face_crop = cv2.resize(face_crop, (128, 128))
                     cv2.imshow("face", face_crop)
 
-                    # crop and show mouth
+                    # Crop and show mouth
                     mouth_crop = face_crop[70:120]
-
                     cv2.imshow("mouth", mouth_crop)
                     mouth_crop = cv2.cvtColor(mouth_crop,cv2.COLOR_BGR2GRAY)
                     mouth= cv2.resize(mouth_crop,(MOUTH_IMG_H, MOUTH_IMG_W),interpolation=cv2.INTER_AREA)	
@@ -301,15 +298,16 @@ if __name__ == '__main__':
 
                     # Feed final image into sess.run()
                     start = time.time()
-                    #result_mouth, result_eyes = sess.run([y_mouth, feed_dict={x_mouth:mouth2}, y_eyes, feed_dict={x_eyes:reshaped}])
                     result_mouth = sess_mouth.run(y_mouth, feed_dict={x_mouth:mouth2})
                     result_eyes = sess_eyes.run(y_eyes, feed_dict={x_eyes:reshaped})
                     end = time.time()
 
+                    # Disregard GPU initialization time from first frame
                     count += 1
                     if count != 1:
                         t += (end - start)
 
+                    # Get scores and predictions
                     maxId_mouth = np.argmax(result_mouth)
                     predScore_mouth = result_mouth[0][maxId_mouth]
                     maxId_eyes = np.argmax(result_eyes)
