@@ -1,1 +1,1 @@
-# eye and mouth classification models for facial detection
+# Eye and mouth classification models for facial detection.
