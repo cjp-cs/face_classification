@@ -198,12 +198,13 @@ if __name__ == '__main__':
     for op in graph_eyes.get_operations():
         print(op.name)
 
+    # Get input and output tensors from frozen graphs
     x_mouth = graph_mouth.get_tensor_by_name('prefix/input_layer:0')
     y_mouth = graph_mouth.get_tensor_by_name('prefix/softmax_tensor:0')
-
     x_eyes = graph_eyes.get_tensor_by_name('prefix/input:0')
     y_eyes = graph_eyes.get_tensor_by_name('prefix/output:0')
 
+    # Face detection
     NUM_CLASSES = 3
     face_detector = FaceDetector(PATH_TO_FACE_PB, PATH_TO_LABELS, NUM_CLASSES)
     detect_thread = DetectThread(face_detector)
@@ -227,10 +228,10 @@ if __name__ == '__main__':
 	    os.mkdir(SAVE_FOLDER) 
 	    os.mkdir(SAVE_FOLDER+NAME+"_face/") 
 
-    count = 0    
-    t = 0
-    op = 0
-    smoke = 0
+    frames = 0    
+    total_time = 0
+    open_count = 0
+    smoke_count = 0
     closed_count = 0
 
     with tf.Session(graph=graph_mouth) as sess_mouth:
@@ -238,6 +239,7 @@ if __name__ == '__main__':
             while (1):
                 # Get a frame
                 ret, frame = cap.read()
+
                 # Show a frame
                 face_detector.update_frame(frame)
                 if face_detector.read_flag() == False:
@@ -247,6 +249,7 @@ if __name__ == '__main__':
                 if (len(faces) > 0) :
                     cropstatus = True
 
+                # Identify face with largest area
                 area = 0
 
                 for face in faces:
@@ -281,11 +284,9 @@ if __name__ == '__main__':
                     mouth2 = np.reshape(mouth,(1, MOUTH_IMG_H, MOUTH_IMG_W,DIM))
                     mouth2 = mouth2/255.0
 
-                    # Crop eyes
+                    # Crop and show eyes
                     cropped_eyes = face_crop[int(0.2*face_crop.shape[0]):int(0.6*face_crop.shape[0]),:]
                     cv2.imshow("cropped eyes", cropped_eyes)
-
-                    # Resize
                     resized = cv2.resize(cropped_eyes, (128, 128))
                     cv2.imshow("resized eyes", cropped_eyes)
 
@@ -296,16 +297,16 @@ if __name__ == '__main__':
                     # Use numpy to reshape
                     reshaped = np.reshape(gray, (1, 128, 128, 1))
 
-                    # Feed final image into sess.run()
+                    # Feed final images into sess.run()
                     start = time.time()
                     result_mouth = sess_mouth.run(y_mouth, feed_dict={x_mouth:mouth2})
                     result_eyes = sess_eyes.run(y_eyes, feed_dict={x_eyes:reshaped})
                     end = time.time()
 
-                    # Disregard GPU initialization time from first frame
-                    count += 1
-                    if count != 1:
-                        t += (end - start)
+                    # Record inference time, disregarding GPU initialization time from first frame
+                    frames += 1
+                    if frames != 1:
+                        total_time += (end - start)
 
                     # Get scores and predictions
                     maxId_mouth = np.argmax(result_mouth)
@@ -322,12 +323,12 @@ if __name__ == '__main__':
 
                     if str(maxId_mouth) == '0':
                         status_mouth = 'closed'
-                        smoke = 0
-                        op = 0
+                        smoke_count = 0
+                        open_count = 0
                     elif str(maxId_mouth) == '1':
                         status_mouth = 'open'
-                        op += 1
-                        if op >= 5:
+                        open_count += 1
+                        if open_count >= 5:
                             cv2.putText(frame,'WARNING!', 
                                 bottomLeftCornerOfText, 
                                 font, 
@@ -336,8 +337,8 @@ if __name__ == '__main__':
                                 lineType)
                     else:
                         status_mouth = 'smoking'
-                        smoke += 1
-                        if smoke >= 5:
+                        smoke_count += 1
+                        if smoke_count >= 5:
                             cv2.putText(frame,'WARNING!', 
                                 bottomLeftCornerOfText, 
                                 font, 
@@ -378,4 +379,4 @@ if __name__ == '__main__':
             cap.release()
             cv2.destroyAllWindows()
         
-        print('Average speed per image: {} seconds'.format(t / count))
+        print('Average speed per image: {} seconds'.format(total_time / frames))
