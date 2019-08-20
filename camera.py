@@ -314,19 +314,19 @@ if __name__ == '__main__':
                     maxId_eyes = np.argmax(result_eyes)
                     predScore_eyes = result_eyes[0][maxId_eyes]
 
-                    # Display class, score, and warning if applicable - need 5 consecutive frames of mouth open for warning to appear
+                    # Display class, score, and warning if applicable
                     font                   = cv2.FONT_HERSHEY_SIMPLEX
-                    bottomLeftCornerOfText = (40, 80)
+                    bottomLeftCornerOfText = (425, 100)
                     fontScale              = 3
                     fontColor              = (0, 0, 255)
-                    lineType               = 2
+                    lineType               = 3
 
                     if str(maxId_mouth) == '0':
-                        status_mouth = 'closed'
                         smoke_count = 0
                         open_count = 0
+                        print("Mouth: mouth closed")
+
                     elif str(maxId_mouth) == '1':
-                        status_mouth = 'open'
                         open_count += 1
                         if open_count >= 5:
                             cv2.putText(frame,'WARNING!', 
@@ -335,8 +335,9 @@ if __name__ == '__main__':
                                 fontScale,
                                 fontColor,
                                 lineType)
+                        print("Mouth: mouth open")
+
                     else:
-                        status_mouth = 'smoking'
                         smoke_count += 1
                         if smoke_count >= 5:
                             cv2.putText(frame,'WARNING!', 
@@ -345,6 +346,7 @@ if __name__ == '__main__':
                                 fontScale,
                                 fontColor,
                                 lineType)
+                        print("Mouth: smoking")
 
                     if str(maxId_eyes) == '0':
                         print("Eyes: eyes open")
@@ -360,6 +362,7 @@ if __name__ == '__main__':
                                 fontScale,
                                 fontColor,
                                 lineType)
+                                
                     elif str(maxId_eyes) == '2':
                         cv2.putText(frame,'WARNING!', 
                                 bottomLeftCornerOfText, 
@@ -368,13 +371,12 @@ if __name__ == '__main__':
                                 fontColor,
                                 lineType)
                         print("Eyes: no eyes detected")
-                        
-                    print("Mouth: " + status_mouth)
 
                 cv2.imshow("capture", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     face_detector.draw_flag = False
                     break
+
             detect_thread.join()
             cap.release()
             cv2.destroyAllWindows()
