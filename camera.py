@@ -11,9 +11,7 @@ os.environ["KMP_SETTINGS"] = '0'
 os.environ["KMP_AFFINITY"]= 'granularity=fine,verbose,compact,1,0'
 os.environ["OMP_NUM_THREADS"]= '4'
 
-
-#CAP_SOURCE ="../collect/via_member/darkroom/zimdyvideo5.h264"
-CAP_SOURCE = 0
+CAP_SOURCE = 'cartest.mp4'
 
 def load_graph(frozen_graph_filename):
     # We load the protobuf file from the disk and parse it to retrieve the 
@@ -34,7 +32,6 @@ def load_graph(frozen_graph_filename):
             producer_op_list=None
         )
     return graph
-
 
 # What model to download.
 class FaceDetector:
@@ -178,8 +175,6 @@ if __name__ == '__main__':
     # modify according to input size
     MOUTH_IMG_H = 32
     MOUTH_IMG_W = 32
-    EYES_IMG_H = 64
-    EYES_IMG_W = 64
     DIM = 1
 
     # What model to download.
@@ -238,7 +233,6 @@ if __name__ == '__main__':
     t = 0
     op = 0
     smoke = 0
-
     closed_count = 0
 
     with tf.Session(graph=graph_mouth) as sess_mouth:
@@ -360,7 +354,7 @@ if __name__ == '__main__':
                     elif str(maxId_eyes) == '1':
                         print("Eyes: eyes closed")
                         closed_count += 1
-                        if closed_count >= 5:
+                        if closed_count >= 8:
                             cv2.putText(frame,'WARNING!', 
                                 bottomLeftCornerOfText, 
                                 font, 
